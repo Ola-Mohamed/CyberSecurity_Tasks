@@ -9,129 +9,119 @@
 #include"SD.h"
 
 /********************************************Global Variable******************************/
-char Recive_service[SIZE_ARRAY];
-char Routine[SIZE_ARRAY];
-char Saved_Routine[SIZE_ARRAY] = {'A','A','0','0'};
-char Random_array[SIZE_ARRAY];
-char Encrypted_Random[SIZE_ARRAY];     // ECU
-char Verification_Random[SIZE_ARRAY];  //user
+char Recive_service[SIZE_ARRAY];              // Array to receive service data
+char Routine[SIZE_ARRAY];                     // Array to store routine data
+char Saved_Routine[SIZE_ARRAY] = {'A','A','0','0'};  // Array storing default routine
+char Random_array[SIZE_ARRAY];                // Array to hold randomly generated data
+char Encrypted_Random[SIZE_ARRAY];            // Array to hold encrypted random data (ECU)
+char Verification_Random[SIZE_ARRAY];         // Array to hold user-entered verification data
 
+char Routine_state;                           // Flag to indicate routine state
+volatile char security_access = 0;            // Volatile variable indicating security access status
 
-char Routine_state;   //flag
-volatile char security_access = 0;
-
-
-S_Dio LED_Routine ={PORTA_ID ,PIN0_ID,OUTPUT};
+S_Dio LED_Routine ={PORTA_ID ,PIN0_ID,OUTPUT}; // Structure for LED Routine configuration
 
 /*******************************************************************************************/
 State_Type Initilazition(){
 
-   State_Type Init_State = E_Not_ok;
+    State_Type Init_State = E_Not_ok; // Initialization state variable
 
-	//MCAL_Dio_Init();
-   MCAL_Dio_SetPinDirection(&LED_Routine);
+    // Initialize various hardware components and peripherals
+    // MCAL_Dio_Init();
+    MCAL_Dio_SetPinDirection(&LED_Routine);
     MCAL_Timer0_OVF_Init(Prescaler_1024);
-	MCAL_UART_init(9600);
-	HAL_LCD_init();
+    MCAL_UART_init(9600);
+    HAL_LCD_init();
 
-	Init_State = E_ok;
+    Init_State = E_ok; // Set initialization state as OK
 
-
-	return Init_State;
-
+    return Init_State; // Return the initialization state
 }
 /*******************************************************************************************/
 State_Type Main_task(){
 
-	State_Type Process_State = E_Not_ok;
+    State_Type Process_State = E_Not_ok; // Main task process state variable
 
-	while(1){
+    while(1){
 
-	for(int i = Initail_i; i < SIZE_ARRAY ;i++){
+        for(int i = Initail_i; i < SIZE_ARRAY ;i++){
 
-		Recive_service[i] = MCAL_UART_receive_sysch();
+            Recive_service[i] = MCAL_UART_receive_sysch(); // Receive service data
+        }
 
-	  }
+        if(Recive_service[0]=='3' && Recive_service[1]=='1' && Recive_service[2]=='0' && Recive_service[3]=='1'){
 
-	if(Recive_service[0]=='3' && Recive_service[1]=='1' && Recive_service[2]=='0'  && Recive_service[3]=='1'){
+            for (int i= Initail_i; i< SIZE_ARRAY; i++){
+                Routine[i] = MCAL_UART_receive_sysch(); // Receive routine data
+            }
 
-		for (int i= Initail_i; i< SIZE_ARRAY; i++){
-		 	Routine[i] = MCAL_UART_receive_sysch();
-		}
+            for (int i= Initail_i; i < SIZE_ARRAY; i++){
+                if(Routine[i] != Saved_Routine[i]){ // Check if routine matches saved routine
 
-		for (int i= Initail_i; i < SIZE_ARRAY; i++){
-		   if(Routine[i] != Saved_Routine[i]){
+                    HAL_LCD_clearScreen();
+                    HAL_LCD_displaystringRowColumn("7F 31 33" , 0 , 3); // Display error message
+                }
 
-			   HAL_LCD_clearScreen();
-			   HAL_LCD_displaystringRowColumn("7F 31 33" , 0 , 3);
-		    }
-			   if( security_access == 0){
+                if(security_access == 0){ // If security access is not granted
 
-				   HAL_LCD_clearScreen();
-				   HAL_LCD_displaystringRowColumn("7F 31 33" , 0 , 3);
-			   }
+                    HAL_LCD_clearScreen();
+                    HAL_LCD_displaystringRowColumn("7F 31 33" , 0 , 3); // Display error message
+                }
 
-			   else{
+                else{ // If security access is granted
 
-				   HAL_LCD_clearScreen();
-				   HAL_LCD_displaystringRowColumn("71 01 AA 00" , 0 , 2);
-				   MCAL_Dio_WriteSinglePin(&LED_Routine,PIN0_ID,1);
+                    HAL_LCD_clearScreen();
+                    HAL_LCD_displaystringRowColumn("71 01 AA 00" , 0 , 2); // Display success message
+                    MCAL_Dio_WriteSinglePin(&LED_Routine,PIN0_ID,1); // Turn on LED
+                }
+            }
+        }
+        else if (Recive_service[0] =='2' && Recive_service[1] =='7' && Recive_service[2] =='0' && Recive_service[3] =='1'){
 
+            HAL_LCD_clearScreen();
+            HAL_LCD_displaystringRowColumn("67 01" , 0 , 2); // Display message
 
-			      }
-		}
-	}
-		else if (Recive_service[0] =='2' && Recive_service[1] =='7' && Recive_service[2] =='0'  && Recive_service[3] =='1'){
+            _delay_ms(1000);
+            HAL_LCD_goToRowColumn(1,2);
+            for(int i = Initail_i ; i<SIZE_ARRAY ; i++){
 
-			 HAL_LCD_clearScreen();
-			 HAL_LCD_displaystringRowColumn("67 01" , 0 , 2);
+                Random_array[i] = '0'+i ; // Generate a random array
 
-			 _delay_ms(1000);
-			 HAL_LCD_goToRowColumn(1,2);
-			 for(int i = Initail_i ; i<SIZE_ARRAY ; i++){
+                Encrypted_Random[i] = Random_array[i] + 2;   // Encrypt the random array
+                HAL_LCD_sendCharacter(Random_array[i]);
+                HAL_LCD_sendCharacter(' ');
+            }
+            security_access = 1; // Set security access flag
+        }
 
-				 Random_array[i] = '0'+i ; // Generate a random array
+        else if(Recive_service[0] =='2' && Recive_service[1] =='7' && Recive_service[2] =='0' && Recive_service[3] =='2' && security_access == 1){
 
-				 Encrypted_Random[i] = Random_array[i] + 2;   //ECU
-				// HAL_LCD_clearScreen();
-				 HAL_LCD_sendCharacter(Random_array[i]);
-				 HAL_LCD_sendCharacter(' ');
-			    }
-			 security_access =1;
-		}
+            for(int i = Initail_i ; i<SIZE_ARRAY ; i++){
 
+                Verification_Random[i] = MCAL_UART_receive_sysch(); // Receive verification data from user
+            }
 
-		else if(Recive_service[0] =='2' && Recive_service[1] =='7' && Recive_service[2] =='0'  && Recive_service[3] =='2' && security_access == 1){
+            for(int i = Initail_i ; i<SIZE_ARRAY ; i++){
 
+                if(Verification_Random[i] == Encrypted_Random[i]){ // Check if verification matches encrypted random data
 
-			 for(int i = Initail_i ; i<SIZE_ARRAY ; i++){
+                    security_access = 2; // Set security access to level 2
+                    HAL_LCD_clearScreen();
+                    HAL_LCD_displaystringRowColumn("67 02" , 0 , 2); // Display success message
+                }
 
-				 Verification_Random[i] = MCAL_UART_receive_sysch(); //User
-			 }
+                else{ // If verification fails
 
-			 for(int i = Initail_i ; i<SIZE_ARRAY ; i++){
+                    HAL_LCD_clearScreen();
+                    HAL_LCD_displaystringRowColumn("7F 27 35" , 0 , 2); // Display error message
+                }
+            }
+        }
 
-				if(Verification_Random[i] == Encrypted_Random[i]){
+        else{
+            // Do nothing
+        }
+    }
 
-					security_access=2;
-					HAL_LCD_clearScreen();
-				    HAL_LCD_displaystringRowColumn("67 02" , 0 , 2);
-
-				  }
-
-				else{
-
-					HAL_LCD_clearScreen();
-				    HAL_LCD_displaystringRowColumn("7F 27 35" , 0 , 2);
-				}
-			 }
-		 }
-
-		else{
-
-			 // Do nothing
-		}
-	}
-
-	return Process_State;
+    return Process_State; // Return the process state
 }
